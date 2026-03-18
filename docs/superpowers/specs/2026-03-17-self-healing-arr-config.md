@@ -62,7 +62,7 @@ This affects all future requests submitted through Jellyseerr.
 
 #### Radarr — Bulk migrate existing movies
 
-Via Radarr API (`PUT /api/v3/movie/editor`):
+Via Radarr API (`PUT /api/v3/movie/editor`, bulk editor endpoint):
 - Find all movies where `qualityProfileId == 5` AND `hasFile == false`
 - Update their `qualityProfileId` to `7`
 - Trigger `MoviesSearch` command for migrated movie IDs
@@ -71,7 +71,7 @@ Condition `hasFile == false` ensures we only touch movies that haven't successfu
 
 #### Sonarr — Bulk migrate existing series
 
-Via Sonarr API (`PUT /api/v3/series/editor`):
+Via Sonarr API (`PUT /api/v3/series/editor`, bulk editor endpoint):
 - Find all series where `qualityProfileId == 5` AND `statistics.episodeFileCount == 0`
 - Update their `qualityProfileId` to `7`
 - Trigger `SeriesSearch` command for migrated series IDs
@@ -98,25 +98,25 @@ Sonarr and Radarr poll qBittorrent periodically. When qBittorrent reports a torr
 
 This is the **Failed Download Handling** feature, currently disabled.
 
+### API Field Names
+
+The Failed Download Handling settings map to these API fields in `GET/PUT /api/v3/config/downloadclient`:
+
+| UI Label | API Field | Target Value |
+|---|---|---|
+| Remove (Completed/Failed) | `removeCompletedDownloads` | `true` |
+| Redownload failed | `autoRedownloadFailed` | `true` |
+
 ### Changes Required
 
-#### Radarr (Settings → Download Clients → Failed Download Handling)
+#### Radarr and Sonarr (Settings → Download Clients → Failed Download Handling)
 
-| Setting | Current | Target |
-|---|---|---|
-| `Remove` | unknown/off | **Enabled** |
-| `Redownload` | unknown/off | **Enabled** |
+For each app:
+1. `GET /api/v3/config/downloadclient` to retrieve the full current config object
+2. Set `removeCompletedDownloads: true` and `autoRedownloadFailed: true` in the object
+3. `PUT /api/v3/config/downloadclient` with the full modified object
 
-#### Sonarr (Settings → Download Clients → Failed Download Handling)
-
-| Setting | Current | Target |
-|---|---|---|
-| `Remove` | unknown/off | **Enabled** |
-| `Redownload` | unknown/off | **Enabled** |
-
-These settings are toggled via the UI or via API:
-- Radarr: `PUT /api/v3/config/downloadclient`
-- Sonarr: `PUT /api/v3/config/downloadclient`
+**Important:** Always GET before PUT. The PUT endpoint requires the complete config object — partial updates will clobber other settings. Do not construct the PUT body from scratch.
 
 ### Known Limitations
 
@@ -142,28 +142,47 @@ These can be addressed in separate specs.
 
 1. Read current Jellyseerr `settings.json` to confirm Radarr/Sonarr profile field names
 2. Update `jellyseerr/settings.json`: set `qualityProfile` to `7` for both Radarr and Sonarr entries
-3. Restart Jellyseerr container to pick up settings change
-4. Radarr bulk profile migration: query movies, filter, PATCH to id:7, trigger search
-5. Sonarr bulk profile migration: query series, filter, PATCH to id:7, trigger search
-6. Enable Failed Download Handling in Radarr via API
-7. Enable Failed Download Handling in Sonarr via API
-8. Verify: check Radarr/Sonarr queues and confirm previously-stuck items start downloading
+3. Restart Jellyseerr container: `docker compose restart jellyseerr`
+4. Verify Jellyseerr is healthy before proceeding: `curl -s http://localhost:5055/api/v1/status` should return 200. Also confirm `settings.json` was written correctly by reading it back.
+5. Radarr bulk profile migration: query all movies (`GET /api/v3/movie`), filter to `qualityProfileId==5 AND hasFile==false`, bulk update via `PUT /api/v3/movie/editor` to `qualityProfileId=7`, then trigger `MoviesSearch` command for migrated IDs. If the search command returns non-2xx, log the error but do not abort — the movies will be picked up on next scheduled search.
+6. Sonarr bulk profile migration: query all series (`GET /api/v3/series`), filter to `qualityProfileId==5 AND statistics.episodeFileCount==0`, bulk update via `PUT /api/v3/series/editor` to `qualityProfileId=7`, then trigger `SeriesSearch` command for migrated IDs. Same error handling as step 5.
+7. Enable Failed Download Handling in Radarr: `GET /api/v3/config/downloadclient`, set `removeCompletedDownloads=true` and `autoRedownloadFailed=true`, `PUT` the full modified object back.
+8. Enable Failed Download Handling in Sonarr: same as step 7.
+9. Verify all changes took effect (see Verification section below).
 
 ---
 
 ## Verification
 
-After implementation:
+After implementation, run all of the following checks:
 
 ```bash
-# Check Radarr movies still on Ultra-HD with no files (should be 0 after migration)
+# 1. Confirm Jellyseerr settings.json was updated correctly
+grep -A5 '"radarr"' /home/kaung/self_hosted/jellyseerr/settings.json | grep qualityProfile
+grep -A5 '"sonarr"' /home/kaung/self_hosted/jellyseerr/settings.json | grep qualityProfile
+# Expected: qualityProfile: 7 for both
+
+# 2. Check Radarr movies still on Ultra-HD with no files (should be 0 after migration)
 curl -s "http://localhost:7878/api/v3/movie?apikey=9f1eed6ac4bc4f0eb9654c8b3d12e14d" | \
   python3 -c "import sys,json; ms=json.load(sys.stdin); stuck=[m['title'] for m in ms if m['qualityProfileId']==5 and not m['hasFile']]; print(len(stuck),'stuck:', stuck[:5])"
+# Expected: 0 stuck
 
-# Check Sonarr series still on Ultra-HD with no files (should be 0 after migration)
+# 3. Check Sonarr series still on Ultra-HD with no files (should be 0 after migration)
 curl -s "http://localhost:8989/api/v3/series?apikey=ba1c87c1d3f84eb1a096095279dabed0" | \
   python3 -c "import sys,json; ss=json.load(sys.stdin); stuck=[s['title'] for s in ss if s['qualityProfileId']==5 and s['statistics']['episodeFileCount']==0]; print(len(stuck),'stuck:', stuck[:5])"
+# Expected: 0 stuck
 
-# Check Failed Download Handling is enabled in Radarr
-curl -s "http://localhost:7878/api/v3/config/downloadclient?apikey=9f1eed6ac4bc4f0eb9654c8b3d12e14d" | python3 -c "import sys,json; c=json.load(sys.stdin); print('remove:', c.get('removeCompletedDownloads'), 'redownload:', c.get('autoRedownloadFailed'))"
+# 4. Check Failed Download Handling is enabled in Radarr
+curl -s "http://localhost:7878/api/v3/config/downloadclient?apikey=9f1eed6ac4bc4f0eb9654c8b3d12e14d" | \
+  python3 -c "import sys,json; c=json.load(sys.stdin); print('removeCompleted:', c.get('removeCompletedDownloads'), '| autoRedownload:', c.get('autoRedownloadFailed'))"
+# Expected: removeCompleted: True | autoRedownload: True
+
+# 5. Check Failed Download Handling is enabled in Sonarr
+curl -s "http://localhost:8989/api/v3/config/downloadclient?apikey=ba1c87c1d3f84eb1a096095279dabed0" | \
+  python3 -c "import sys,json; c=json.load(sys.stdin); print('removeCompleted:', c.get('removeCompletedDownloads'), '| autoRedownload:', c.get('autoRedownloadFailed'))"
+# Expected: removeCompleted: True | autoRedownload: True
+
+# 6. Confirm Jellyseerr is healthy after restart
+curl -s -o /dev/null -w "%{http_code}" http://localhost:5055/api/v1/status
+# Expected: 200
 ```
