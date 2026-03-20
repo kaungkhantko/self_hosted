@@ -489,6 +489,19 @@ services:
       - ${MEDIA_PATH}:/data
     restart: unless-stopped
 
+  # ─────────────────────────────────────────────
+  # subtitle-cron — Daily subtitle downloader
+  # Runs download_subs.py at 03:00 every day via busybox crond
+  # Replaces the host cron job: 0 3 * * * /home/kaung/subliminal_venv/bin/python3 /home/kaung/download_subs.py
+  subtitle-cron:
+    build: ./subtitle-cron
+    container_name: subtitle-cron
+    restart: unless-stopped
+    volumes:
+      - ${MEDIA_PATH}:/mnt/media
+    environment:
+      - TZ=${TZ}
+
 volumes:
   caddy_data:
   caddy_config:
