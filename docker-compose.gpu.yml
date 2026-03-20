@@ -1,0 +1,22 @@
+# GPU overlay — activate by setting in .env:
+# COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
+#
+# Requires: NVIDIA drivers + NVIDIA Container Toolkit on the host.
+# Install guide: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+
+services:
+  jellyfin:
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
+
+  immich-server:
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+
+  immich-machine-learning:
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
