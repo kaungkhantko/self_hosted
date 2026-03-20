@@ -1,0 +1,5 @@
+# Secrets
+.env
+
+# Git worktrees
+.worktrees/
