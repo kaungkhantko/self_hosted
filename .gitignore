@@ -1,5 +1,21 @@
-# Secrets
+# Credentials — never commit
 .env
 
 # Git worktrees
 .worktrees/
+
+# Logs
+*.log
+compose-up.log
+compose-apply.log
+pull-images.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Immich large binary outputs (auto-generated, not source)
+immich_upload/backups/
+immich_upload/encoded-video/
