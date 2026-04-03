@@ -7,3 +7,9 @@
 # Actual Budget — runtime data (SQLite, migrations, server files)
 actual_data/*
 !actual_data/.gitkeep
+
+# Firefly III — runtime data
+firefly_db/*
+!firefly_db/.gitkeep
+firefly_data/*
+!firefly_data/.gitkeep
