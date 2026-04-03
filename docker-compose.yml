@@ -536,6 +536,8 @@ services:
           memory: 256m
     restart: unless-stopped
 
+  # ─────────────────────────────────────────────
+  # Firefly III — Main Application
   firefly-iii:
     image: fireflyiii/core:latest
     container_name: firefly-iii
@@ -562,6 +564,8 @@ services:
           memory: 512m
     restart: unless-stopped
 
+  # ─────────────────────────────────────────────
+  # Firefly III — Data Importer (CSV / bank import UI)
   firefly-importer:
     image: fireflyiii/data-importer:latest
     container_name: firefly-importer
