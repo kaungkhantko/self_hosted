@@ -1,0 +1,535 @@
+services:
+  # ─────────────────────────────────────────────
+  # Navidrome Music Server
+  navidrome:
+    image: deluan/navidrome
+    ports:
+      - "4533:4533"
+    volumes:
+      - ./navidrome:/data
+      - /mnt/media/Music:/music:ro
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # DuckDNS Dynamic IP Updater
+  duckdns:
+    image: linuxserver/duckdns
+    container_name: duckdns
+    environment:
+      - SUBDOMAINS=kaungkhantko
+      - TOKEN=${DUCKDNS_TOKEN}
+      - LOG_FILE=false
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Caddy HTTPS Reverse Proxy
+  caddy:
+    image: caddy:latest
+    container_name: caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - navidrome
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Jellyfin Media Server — NVENC hardware transcoding via RTX 2060 SUPER
+  # After restart: Admin → Dashboard → Playback → Hardware Acceleration → NVIDIA NVENC
+  jellyfin:
+    image: jellyfin/jellyfin
+    container_name: jellyfin
+    runtime: nvidia
+    ports:
+      - "8096:8096"
+    environment:
+      - JELLYFIN_PublishedServerUrl=http://media.kaungkhantko.duckdns.org
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - ./jellyfin_config:/config
+      - ./jellyfin_cache:/cache
+      - /mnt/media/TV:/media/tv:rw
+      - /mnt/media/Movies:/media/movies:rw
+      # media-watcher creates symlinks inside /media/tv and /media/movies that
+      # point to /data/downloads/... — Jellyfin needs /data mounted so it can
+      # follow those symlinks to the actual (partially) downloaded files.
+      - /mnt/media:/data:ro
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+          cpus: "4.0"
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # n8n Workflow Automation
+  # WEBHOOK_URL updated to public DuckDNS URL so GitHub webhooks can reach it
+  # LAN access still works via n8n.lan (Caddy internal route)
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    user: "1000:1000"
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=n8n.kaungkhantko.duckdns.org
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=https://n8n.kaungkhantko.duckdns.org/
+      - GENERIC_TIMEZONE=Asia/Rangoon
+    volumes:
+      - ./n8n:/home/node/.n8n
+      - /home/kaung/Odoo-IFM/docs:/home/kaung/Odoo-IFM/docs:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Gluetun — VPN client (Mullvad/WireGuard)
+  # qBittorrent runs inside this container's network namespace so all
+  # torrent traffic exits through the VPN tunnel.
+  # Other containers reach qBittorrent via http://gluetun:8082
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - VPN_SERVICE_PROVIDER=mullvad
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${MULLVAD_WG_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=10.74.67.132/32
+      - SERVER_COUNTRIES=Sweden
+      - FIREWALL_INPUT_PORTS=8082,6881
+      - TZ=Asia/Rangoon
+      - DNS_ADDRESS=1.1.1.1
+      - BLOCK_MALICIOUS=off
+    ports:
+      - "8082:8082"
+      - "6881:6881"
+      - "6881:6881/udp"
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # qBittorrent — Torrent Download Client
+  # Runs inside gluetun's network namespace — all traffic goes through VPN.
+  # All arr apps and qBit share /mnt/media as /data so hardlinks work.
+  # Reach the WebUI at http://gluetun:8082 (not qbittorrent:8082)
+  qbittorrent:
+    image: linuxserver/qbittorrent
+    container_name: qbittorrent
+    network_mode: "service:gluetun"
+    depends_on:
+      - gluetun
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Rangoon
+      - WEBUI_PORT=8082
+    volumes:
+      - ./qbittorrent:/config
+      - type: bind
+        source: /mnt/media
+        target: /data
+        bind:
+          propagation: slave
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "2.0"
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # FlareSolverr — Cloudflare bypass proxy for Prowlarr
+  # Prowlarr routes CF-protected indexers through this
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=info
+      - TZ=Asia/Rangoon
+    ports:
+      - "8191:8191"
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Prowlarr — Torrent Indexer Manager
+  # Connects to Radarr + Sonarr and manages all indexers in one place
+  prowlarr:
+    image: linuxserver/prowlarr
+    container_name: prowlarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Rangoon
+    volumes:
+      - ./prowlarr:/config
+    ports:
+      - "9696:9696"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Radarr — Movie Collection Manager
+  # Monitors /data/Movies, grabs movies via Prowlarr → qBittorrent
+  radarr:
+    image: linuxserver/radarr
+    container_name: radarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Rangoon
+    volumes:
+      - ./radarr:/config
+      - /mnt/media:/data
+    ports:
+      - "7878:7878"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Sonarr — TV Series Collection Manager
+  # Monitors /data/TV, grabs episodes via Prowlarr → qBittorrent
+  sonarr:
+    image: linuxserver/sonarr
+    container_name: sonarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Rangoon
+    volumes:
+      - ./sonarr:/config
+      - /mnt/media:/data
+    ports:
+      - "8989:8989"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Lidarr — Music Collection Manager
+  # Monitors /data/Music, grabs albums via Prowlarr → qBittorrent
+  lidarr:
+    image: linuxserver/lidarr
+    container_name: lidarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Rangoon
+    volumes:
+      - ./lidarr:/config
+      - /mnt/media:/data
+    ports:
+      - "8686:8686"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Jellyseerr — Unified Media Request UI (Netflix-like)
+  # Browse/search/request content → auto-routes to Radarr or Sonarr
+  jellyseerr:
+    image: ghcr.io/seerr-team/seerr:v3.1.0
+    container_name: jellyseerr
+    environment:
+      - LOG_LEVEL=info
+      - TZ=Asia/Rangoon
+    volumes:
+      - ./jellyseerr:/app/config
+    ports:
+      - "5055:5055"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Vaultwarden — Self-hosted Password Manager (Bitwarden-compatible)
+  # Admin panel: https://vault.kaungkhantko.duckdns.org/admin
+  # Use with the official Bitwarden browser extension / mobile app
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    environment:
+      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
+      - TZ=Asia/Rangoon
+    volumes:
+      - ./vaultwarden:/data
+    ports:
+      - "8089:80"
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Bazarr — Automatic Subtitle Management
+  # After deploy: Settings → Providers → add OpenSubtitles.com (you have an account)
+  # Settings → Sonarr: http://sonarr:8989, api key from sonarr/config.xml
+  # Settings → Radarr: http://radarr:7878, api key from radarr/config.xml
+  bazarr:
+    image: linuxserver/bazarr
+    container_name: bazarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Rangoon
+    volumes:
+      - ./bazarr:/config
+      - /mnt/media:/data
+    ports:
+      - "6767:6767"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # ntfy — Self-hosted Push Notification Server
+  # After deploy, create an admin user:
+  #   docker exec -it ntfy ntfy user add --role=admin kaung
+  # Then subscribe to topics in the ntfy app (iOS/Android)
+  # Jellyseerr: Settings → Notifications → Webhook → https://ntfy.kaungkhantko.duckdns.org/alerts
+  ntfy:
+    image: binwiederhier/ntfy
+    container_name: ntfy
+    command: serve
+    environment:
+      - TZ=Asia/Rangoon
+      - NTFY_BASE_URL=https://ntfy.kaungkhantko.duckdns.org
+      - NTFY_CACHE_FILE=/var/cache/ntfy/cache.db
+      - NTFY_AUTH_FILE=/var/cache/ntfy/auth.db
+      - NTFY_AUTH_DEFAULT_ACCESS=deny-all
+      - NTFY_BEHIND_PROXY=true
+    volumes:
+      - ./ntfy:/var/cache/ntfy
+    ports:
+      - "2586:80"
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Uptime Kuma — Service Monitoring & Alerting Dashboard
+  # After deploy: add monitors for all your services
+  # Alert channel: ntfy → https://ntfy.kaungkhantko.duckdns.org/alerts
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    volumes:
+      - ./uptime-kuma:/app/data
+    ports:
+      - "3001:3001"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Homer — Lightweight Static Service Dashboard
+  # Config lives at ./homer/config.yml — edit it to update the dashboard
+  homer:
+    image: b4bz/homer:latest
+    container_name: homer
+    volumes:
+      - ./homer:/www/assets
+    ports:
+      - "7575:8080"
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Readarr — Book & Manga Collection Manager
+  # Root folder: /data/Books  (→ /mnt/media/Books on host)
+  # Connect to Prowlarr for indexers and qBittorrent for downloads
+  readarr:
+    image: ghcr.io/linuxserver/readarr:amd64-nightly-version-0.4.19.2811  # pinned: multi-arch manifest is broken upstream, use explicit amd64 tag
+    container_name: readarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Rangoon
+    volumes:
+      - ./readarr:/config
+      - /mnt/media:/data
+    ports:
+      - "8787:8787"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Calibre-Web — Book Reader & Library UI
+  # First run: set library path to /books when prompted
+  # DOCKER_MODS adds Calibre binaries for ebook conversion
+  calibre-web:
+    image: linuxserver/calibre-web:latest
+    container_name: calibre-web
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Rangoon
+    volumes:
+      - ./calibre-web:/config
+      - /mnt/media/Books:/books
+    ports:
+      - "8083:8083"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Immich — Self-hosted Google Photos replacement
+  # Existing photos at /mnt/personal/Photos → add as External Library in Admin UI:
+  #   Admin → External Libraries → Create → path: /mnt/personal/Photos
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:release
+    container_name: immich-server
+    runtime: nvidia
+    environment:
+      - DB_HOSTNAME=immich-db
+      - DB_USERNAME=immich
+      - DB_PASSWORD=${IMMICH_DB_PASSWORD}
+      - DB_DATABASE_NAME=immich
+      - REDIS_HOSTNAME=immich-redis
+      - IMMICH_MACHINE_LEARNING_URL=http://immich-machine-learning:3003
+      - TZ=Asia/Rangoon
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ./immich_upload:/usr/src/app/upload
+      - /mnt/personal/Photos:/mnt/personal/Photos:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "2283:2283"
+    depends_on:
+      - immich-db
+      - immich-redis
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Immich Machine Learning
+  # Uses RTX 2060 SUPER (CUDA) for fast inference
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:release-cuda
+    container_name: immich-machine-learning
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - immich_model_cache:/cache
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: "4.0"
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Immich Redis (Valkey) — Job queue & cache
+  immich-redis:
+    image: docker.io/valkey/valkey:9
+    container_name: immich-redis
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Immich Database — PostgreSQL 14 with pgvecto.rs for vector search
+  # DB_STORAGE_TYPE=HDD because data lives on spinning disk
+  immich-db:
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
+    container_name: immich-db
+    environment:
+      - POSTGRES_USER=immich
+      - POSTGRES_PASSWORD=${IMMICH_DB_PASSWORD}
+      - POSTGRES_DB=immich
+      - DB_STORAGE_TYPE=HDD
+    volumes:
+      - ./immich_db:/var/lib/postgresql/data
+    shm_size: 128mb
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # media-watcher — Watch-while-downloading bridge
+  # Polls qBittorrent for active downloads, cross-references Radarr/Sonarr
+  # queues, and creates symlinks inside Jellyfin library folders so content
+  # can be streamed the moment sequential downloading has buffered the start.
+  # Symlinks are cleaned up automatically after Radarr/Sonarr complete import.
+  media-watcher:
+    build: ./media-watcher
+    container_name: media-watcher
+    environment:
+      - QB_URL=http://gluetun:8082
+      - QB_USER=admin
+      - QB_PASS=${QB_PASS}
+      - RADARR_URL=http://radarr:7878
+      - RADARR_KEY=${RADARR_KEY}
+      - SONARR_URL=http://sonarr:8989
+      - SONARR_KEY=${SONARR_KEY}
+      - JELLYFIN_URL=http://jellyfin:8096
+      - JELLYFIN_KEY=${JELLYFIN_KEY}
+      - MEDIA_PATH=/data
+      - POLL_INTERVAL=30
+      - MIN_PROGRESS=0.02
+    volumes:
+      - /mnt/media:/data
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Actual Budget — Personal Finance / Budgeting
+  # First run: open https://budget.lan and set a password
+  # Data persisted at ./actual_data (SQLite — no external DB needed)
+  actual-server:
+    image: actualbudget/actual-server:latest
+    container_name: actual-server
+    volumes:
+      - ./actual_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Odoo 19 — PostgreSQL database
+  odoo_db:
+    image: postgres:16
+    container_name: odoo_db
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=odoo
+      - POSTGRES_PASSWORD=${ODOO_DB_PASSWORD}
+    volumes:
+      - odoo_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
+  immich_model_cache:
+  odoo_db_data:
