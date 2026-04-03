@@ -509,12 +509,10 @@ services:
     container_name: actual-server
     volumes:
       - ./actual_data:/data
-    ports:
-      - "5006:5006"
     deploy:
       resources:
         limits:
-          memory: 128m
+          memory: 256m
     restart: unless-stopped
 
 volumes:
