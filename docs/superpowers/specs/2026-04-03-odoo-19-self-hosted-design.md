@@ -84,12 +84,11 @@ New file at `./odoo/odoo.conf`:
 
 ```ini
 [options]
-addons_path = /mnt/extra-addons,/usr/lib/python3/dist-packages/odoo/addons
 data_dir = /var/lib/odoo
 proxy_mode = True
 ```
 
-DB credentials are not stored in this file — they are passed via environment variables in the `odoo` service (`HOST`, `USER`, `PASSWORD`), which the official Odoo Docker image reads at startup.
+`addons_path` is intentionally omitted — Odoo uses its compiled-in default for the official Docker image. Adding it would require hardcoding the Python dist-packages path which differs between Odoo versions.
 
 `proxy_mode = True` is required when Odoo sits behind a reverse proxy. Without it, Odoo generates incorrect redirect URLs and sessions may fail.
 
