@@ -3,3 +3,7 @@
 
 # Git worktrees
 .worktrees/
+
+# Actual Budget — runtime data (SQLite, migrations, server files)
+actual_data/*
+!actual_data/.gitkeep
