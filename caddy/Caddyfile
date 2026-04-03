@@ -95,6 +95,16 @@ odoo.lan {
 	tls internal
 }
 
+firefly.lan {
+	reverse_proxy firefly-iii:8080
+	tls internal
+}
+
+firefly-import.lan {
+	reverse_proxy firefly-importer:8080
+	tls internal
+}
+
 # ── External access via DuckDNS (requires ports 80+443 forwarded on router) ──
 
 kaungkhantko.duckdns.org {
