@@ -509,10 +509,74 @@ services:
     container_name: actual-server
     volumes:
       - ./actual_data:/data
+    ports:
+      - "5006:5006"
     deploy:
       resources:
         limits:
           memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Firefly III — Self-hosted Personal Finance Manager
+  # First run: open http://<host>:8080 to create admin account
+  # Data Importer UI: http://<host>:8081
+  firefly-db:
+    image: postgres:16-alpine
+    container_name: firefly-db
+    environment:
+      - POSTGRES_USER=firefly
+      - POSTGRES_PASSWORD=${FIREFLY_DB_PASSWORD}
+      - POSTGRES_DB=firefly
+    volumes:
+      - ./firefly_db:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  firefly-iii:
+    image: fireflyiii/core:latest
+    container_name: firefly-iii
+    depends_on:
+      - firefly-db
+    environment:
+      - APP_KEY=${FIREFLY_APP_KEY}
+      - APP_URL=http://firefly.lan
+      - DB_CONNECTION=pgsql
+      - DB_HOST=firefly-db
+      - DB_PORT=5432
+      - DB_DATABASE=firefly
+      - DB_USERNAME=firefly
+      - DB_PASSWORD=${FIREFLY_DB_PASSWORD}
+      - TZ=Asia/Rangoon
+      - TRUSTED_PROXIES=**
+    volumes:
+      - ./firefly_data:/var/www/html/storage/upload
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    restart: unless-stopped
+
+  firefly-importer:
+    image: fireflyiii/data-importer:latest
+    container_name: firefly-importer
+    depends_on:
+      - firefly-iii
+    environment:
+      - FIREFLY_III_URL=http://firefly-iii:8080
+      - VANITY_URL=http://firefly.lan
+      - TZ=Asia/Rangoon
+    ports:
+      - "8081:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 128m
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
