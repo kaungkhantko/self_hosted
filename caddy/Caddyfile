@@ -90,6 +90,11 @@ budget.lan {
 	tls internal
 }
 
+odoo.lan {
+	reverse_proxy odoo:8069
+	tls internal
+}
+
 # ── External access via DuckDNS (requires ports 80+443 forwarded on router) ──
 
 kaungkhantko.duckdns.org {
