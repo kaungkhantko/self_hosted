@@ -524,8 +524,26 @@ services:
       - POSTGRES_DB=postgres
       - POSTGRES_USER=odoo
       - POSTGRES_PASSWORD=${ODOO_DB_PASSWORD}
+      - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
       - odoo_db_data:/var/lib/postgresql/data
+    shm_size: 128mb
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Odoo 19 — CRM + Accounting (Community Edition)
+  odoo:
+    image: odoo:19
+    container_name: odoo
+    depends_on:
+      - odoo_db
+    environment:
+      - HOST=odoo_db
+      - USER=odoo
+      - PASSWORD=${ODOO_DB_PASSWORD}
+    volumes:
+      - odoo_data:/var/lib/odoo
+      - ./odoo/odoo.conf:/etc/odoo/odoo.conf
     restart: unless-stopped
 
 volumes:
@@ -533,3 +551,4 @@ volumes:
   caddy_config:
   immich_model_cache:
   odoo_db_data:
+  odoo_data:
