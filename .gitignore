@@ -9,7 +9,7 @@ actual_data/*
 !actual_data/.gitkeep
 
 # Firefly III — runtime data
-firefly_db/data/*
-!firefly_db/data/.gitkeep
+firefly_db/*
+!firefly_db/.gitkeep
 firefly_data/*
 !firefly_data/.gitkeep
