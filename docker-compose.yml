@@ -529,7 +529,7 @@ services:
       - POSTGRES_PASSWORD=${FIREFLY_DB_PASSWORD}
       - POSTGRES_DB=firefly
     volumes:
-      - ./firefly_db:/var/lib/postgresql/data
+      - ./firefly_db/data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U firefly"]
       interval: 10s
