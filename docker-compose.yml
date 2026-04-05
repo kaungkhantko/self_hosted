@@ -38,18 +38,14 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
-  # Jellyfin Media Server — NVENC hardware transcoding via RTX 2060 SUPER
-  # After restart: Admin → Dashboard → Playback → Hardware Acceleration → NVIDIA NVENC
+  # Jellyfin Media Server — software transcoding (no GPU)
   jellyfin:
     image: jellyfin/jellyfin
     container_name: jellyfin
-    runtime: nvidia
     ports:
       - "8096:8096"
     environment:
       - JELLYFIN_PublishedServerUrl=http://media.kaungkhantko.duckdns.org
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:
       - ./jellyfin_config:/config
       - ./jellyfin_cache:/cache
@@ -411,7 +407,6 @@ services:
   immich-server:
     image: ghcr.io/immich-app/immich-server:release
     container_name: immich-server
-    runtime: nvidia
     environment:
       - DB_HOSTNAME=immich-db
       - DB_USERNAME=immich
@@ -420,7 +415,6 @@ services:
       - REDIS_HOSTNAME=immich-redis
       - IMMICH_MACHINE_LEARNING_URL=http://immich-machine-learning:3003
       - TZ=Asia/Rangoon
-      - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - ./immich_upload:/usr/src/app/upload
       - /mnt/personal/Photos:/mnt/personal/Photos:ro
@@ -437,14 +431,10 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
-  # Immich Machine Learning
-  # Uses RTX 2060 SUPER (CUDA) for fast inference
+  # Immich Machine Learning — CPU inference
   immich-machine-learning:
-    image: ghcr.io/immich-app/immich-machine-learning:release-cuda
+    image: ghcr.io/immich-app/immich-machine-learning:release
     container_name: immich-machine-learning
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - immich_model_cache:/cache
     deploy:
