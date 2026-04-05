@@ -70,6 +70,11 @@ books.lan {
 	tls internal
 }
 
+docs.lan {
+	reverse_proxy paperless-ngx:8000
+	tls internal
+}
+
 jellyseerr.lan {
 	reverse_proxy jellyseerr:5055
 	tls internal

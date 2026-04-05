@@ -626,6 +626,42 @@ services:
       - ./odoo/odoo.conf:/etc/odoo/odoo.conf
     restart: unless-stopped
 
+  # ─────────────────────────────────────────────
+  # Paperless-ngx Redis — Job queue / broker
+  paperless-redis:
+    image: docker.io/valkey/valkey:9
+    container_name: paperless-redis
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Paperless-ngx — Document Management with OCR
+  # Consume folder (inbox): /mnt/personal/Documents/paperless-consume/
+  # After first deploy, create admin: docker compose exec paperless-ngx python manage.py createsuperuser
+  paperless-ngx:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    container_name: paperless-ngx
+    depends_on:
+      - paperless-redis
+    environment:
+      - PAPERLESS_REDIS=redis://paperless-redis:6379
+      - PAPERLESS_OCR_LANGUAGE=eng+mya
+      - PAPERLESS_OCR_LANGUAGES=mya
+      - PAPERLESS_TIME_ZONE=Asia/Yangon
+      - PAPERLESS_URL=https://docs.lan
+      - PAPERLESS_SECRET_KEY=${PAPERLESS_SECRET_KEY}
+    volumes:
+      - ./paperless:/usr/src/paperless/data
+      - /mnt/personal/Documents/paperless:/usr/src/paperless/media
+      - /mnt/personal/Documents/paperless-consume:/usr/src/paperless/consume
+      - /mnt/personal/Documents/paperless-export:/usr/src/paperless/export
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    restart: unless-stopped
+
 volumes:
   caddy_data:
   caddy_config:
