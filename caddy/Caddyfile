@@ -20,18 +20,8 @@ photos.lan {
 	tls internal
 }
 
-vault.lan {
-	reverse_proxy vaultwarden:80
-	tls internal
-}
-
 bazarr.lan {
 	reverse_proxy bazarr:6767
-	tls internal
-}
-
-ntfy.lan {
-	reverse_proxy ntfy:80
 	tls internal
 }
 
@@ -41,7 +31,7 @@ status.lan {
 }
 
 home.lan {
-	reverse_proxy homer:8080
+	reverse_proxy homepage:3000
 	tls internal
 }
 
@@ -125,12 +115,4 @@ n8n.kaungkhantko.duckdns.org {
 
 photos.kaungkhantko.duckdns.org {
 	reverse_proxy immich-server:2283
-}
-
-vault.kaungkhantko.duckdns.org {
-	reverse_proxy vaultwarden:80
-}
-
-ntfy.kaungkhantko.duckdns.org {
-	reverse_proxy ntfy:80
 }
