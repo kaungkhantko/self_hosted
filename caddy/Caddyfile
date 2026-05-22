@@ -20,18 +20,8 @@ photos.lan {
 	tls internal
 }
 
-vault.lan {
-	reverse_proxy vaultwarden:80
-	tls internal
-}
-
 bazarr.lan {
 	reverse_proxy bazarr:6767
-	tls internal
-}
-
-ntfy.lan {
-	reverse_proxy ntfy:80
 	tls internal
 }
 
@@ -41,7 +31,17 @@ status.lan {
 }
 
 home.lan {
-	reverse_proxy homer:8080
+	reverse_proxy homepage:3000
+	tls internal
+}
+
+dozzle.lan {
+	reverse_proxy dozzle:8080
+	tls internal
+}
+
+scrutiny.lan {
+	reverse_proxy scrutiny:8080
 	tls internal
 }
 
@@ -66,7 +66,7 @@ prowlarr.lan {
 }
 
 qbittorrent.lan {
-	reverse_proxy qbittorrent:8082
+	reverse_proxy gluetun:8082
 	tls internal
 }
 
@@ -77,6 +77,11 @@ readarr.lan {
 
 books.lan {
 	reverse_proxy calibre-web:8083
+	tls internal
+}
+
+docs.lan {
+	reverse_proxy paperless-ngx:8000
 	tls internal
 }
 
@@ -127,10 +132,7 @@ photos.kaungkhantko.duckdns.org {
 	reverse_proxy immich-server:2283
 }
 
-vault.kaungkhantko.duckdns.org {
-	reverse_proxy vaultwarden:80
-}
-
-ntfy.kaungkhantko.duckdns.org {
-	reverse_proxy ntfy:80
+write.lan {
+	reverse_proxy writebook:3000
+	tls internal
 }

@@ -38,18 +38,14 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
-  # Jellyfin Media Server — NVENC hardware transcoding via RTX 2060 SUPER
-  # After restart: Admin → Dashboard → Playback → Hardware Acceleration → NVIDIA NVENC
+  # Jellyfin Media Server — Intel QSV hardware transcoding (Intel HD 630)
   jellyfin:
     image: jellyfin/jellyfin
     container_name: jellyfin
-    runtime: nvidia
     ports:
       - "8096:8096"
     environment:
       - JELLYFIN_PublishedServerUrl=http://media.kaungkhantko.duckdns.org
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:
       - ./jellyfin_config:/config
       - ./jellyfin_cache:/cache
@@ -64,6 +60,9 @@ services:
         limits:
           memory: 3g
           cpus: "4.0"
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+      - /dev/dri/card0:/dev/dri/card0
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
@@ -84,7 +83,7 @@ services:
       - GENERIC_TIMEZONE=Asia/Rangoon
     volumes:
       - ./n8n:/home/node/.n8n
-      - /home/kaung/Odoo-IFM/docs:/home/kaung/Odoo-IFM/docs:ro
+      - /mnt/media/Odoo-IFM/docs:/home/kaung/Odoo-IFM/docs:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     deploy:
@@ -137,6 +136,7 @@ services:
       - PGID=1000
       - TZ=Asia/Rangoon
       - WEBUI_PORT=8082
+      - WEBUI_ADDRESS=0.0.0.0
     volumes:
       - ./qbittorrent:/config
       - type: bind
@@ -267,22 +267,6 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
-  # Vaultwarden — Self-hosted Password Manager (Bitwarden-compatible)
-  # Admin panel: https://vault.kaungkhantko.duckdns.org/admin
-  # Use with the official Bitwarden browser extension / mobile app
-  vaultwarden:
-    image: vaultwarden/server:latest
-    container_name: vaultwarden
-    environment:
-      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
-      - TZ=Asia/Rangoon
-    volumes:
-      - ./vaultwarden:/data
-    ports:
-      - "8089:80"
-    restart: unless-stopped
-
-  # ─────────────────────────────────────────────
   # Bazarr — Automatic Subtitle Management
   # After deploy: Settings → Providers → add OpenSubtitles.com (you have an account)
   # Settings → Sonarr: http://sonarr:8989, api key from sonarr/config.xml
@@ -306,32 +290,8 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
-  # ntfy — Self-hosted Push Notification Server
-  # After deploy, create an admin user:
-  #   docker exec -it ntfy ntfy user add --role=admin kaung
-  # Then subscribe to topics in the ntfy app (iOS/Android)
-  # Jellyseerr: Settings → Notifications → Webhook → https://ntfy.kaungkhantko.duckdns.org/alerts
-  ntfy:
-    image: binwiederhier/ntfy
-    container_name: ntfy
-    command: serve
-    environment:
-      - TZ=Asia/Rangoon
-      - NTFY_BASE_URL=https://ntfy.kaungkhantko.duckdns.org
-      - NTFY_CACHE_FILE=/var/cache/ntfy/cache.db
-      - NTFY_AUTH_FILE=/var/cache/ntfy/auth.db
-      - NTFY_AUTH_DEFAULT_ACCESS=deny-all
-      - NTFY_BEHIND_PROXY=true
-    volumes:
-      - ./ntfy:/var/cache/ntfy
-    ports:
-      - "2586:80"
-    restart: unless-stopped
-
-  # ─────────────────────────────────────────────
   # Uptime Kuma — Service Monitoring & Alerting Dashboard
   # After deploy: add monitors for all your services
-  # Alert channel: ntfy → https://ntfy.kaungkhantko.duckdns.org/alerts
   uptime-kuma:
     image: louislam/uptime-kuma:1
     container_name: uptime-kuma
@@ -346,15 +306,62 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
-  # Homer — Lightweight Static Service Dashboard
-  # Config lives at ./homer/config.yml — edit it to update the dashboard
-  homer:
-    image: b4bz/homer:latest
-    container_name: homer
+  # Homepage — Modern, fully static service dashboard
+  # Config lives in ./homepage/ — services.yaml, widgets.yaml, settings.yaml
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    env_file:
+      - .env
+    environment:
+      - HOMEPAGE_ALLOWED_HOSTS=192.168.1.2:3000,home.lan
     volumes:
-      - ./homer:/www/assets
+      - ./homepage:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
-      - "7575:8080"
+      - "3000:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Dozzle — Real-time Docker Log Viewer
+  # Lightweight, read-only log viewer for all containers
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "9999:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 32m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Scrutiny — Hard Drive Health Monitoring (SMART data)
+  # Monitors /dev/sda (OS drive) and /dev/sdb (Media DAS drive)
+  scrutiny:
+    image: ghcr.io/analogj/scrutiny:master-omnibus
+    container_name: scrutiny
+    cap_add:
+      - SYS_RAWIO
+    devices:
+      - /dev/sda:/dev/sda
+      - /dev/sdb:/dev/sdb
+    volumes:
+      - /run/udev:/run/udev:ro
+      - ./scrutiny:/opt/scrutiny/config
+    ports:
+      - "8090:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 128m
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
@@ -408,7 +415,6 @@ services:
   immich-server:
     image: ghcr.io/immich-app/immich-server:release
     container_name: immich-server
-    runtime: nvidia
     environment:
       - DB_HOSTNAME=immich-db
       - DB_USERNAME=immich
@@ -417,10 +423,9 @@ services:
       - REDIS_HOSTNAME=immich-redis
       - IMMICH_MACHINE_LEARNING_URL=http://immich-machine-learning:3003
       - TZ=Asia/Rangoon
-      - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - ./immich_upload:/usr/src/app/upload
-      - /mnt/personal/Photos:/mnt/personal/Photos:ro
+      - /mnt/media/Photos:/mnt/media/Photos:ro
       - /etc/localtime:/etc/localtime:ro
     ports:
       - "2283:2283"
@@ -434,14 +439,10 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
-  # Immich Machine Learning
-  # Uses RTX 2060 SUPER (CUDA) for fast inference
+  # Immich Machine Learning — CPU inference
   immich-machine-learning:
-    image: ghcr.io/immich-app/immich-machine-learning:release-cuda
+    image: ghcr.io/immich-app/immich-machine-learning:release
     container_name: immich-machine-learning
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - immich_model_cache:/cache
     deploy:
@@ -623,9 +624,59 @@ services:
       - ./odoo/odoo.conf:/etc/odoo/odoo.conf
     restart: unless-stopped
 
+  # ─────────────────────────────────────────────
+  # Paperless-ngx Redis — Job queue / broker
+  paperless-redis:
+    image: docker.io/valkey/valkey:9
+    container_name: paperless-redis
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Paperless-ngx — Document Management with OCR
+  # Consume folder (inbox): /mnt/personal/Documents/paperless-consume/
+  # After first deploy, create admin: docker compose exec paperless-ngx python manage.py createsuperuser
+  paperless-ngx:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    container_name: paperless-ngx
+    depends_on:
+      - paperless-redis
+    environment:
+      - PAPERLESS_REDIS=redis://paperless-redis:6379
+      - PAPERLESS_OCR_LANGUAGE=eng+mya
+      - PAPERLESS_OCR_LANGUAGES=mya
+      - PAPERLESS_TIME_ZONE=Asia/Yangon
+      - PAPERLESS_URL=https://docs.lan
+      - PAPERLESS_SECRET_KEY=${PAPERLESS_SECRET_KEY}
+    volumes:
+      - ./paperless:/usr/src/paperless/data
+      - /mnt/media/Documents/paperless:/usr/src/paperless/media
+      - /mnt/media/Documents/paperless-consume:/usr/src/paperless/consume
+      - /mnt/media/Documents/paperless-export:/usr/src/paperless/export
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    restart: unless-stopped
+
+
+  # ─────────────────────────────────────────────
+  # Writebook
+  writebook:
+    image: ghcr.io/basecamp/writebook:latest
+    container_name: writebook
+    volumes:
+      - writebook_data:/rails/storage
+    environment:
+      - SECRET_KEY_BASE=${WRITEBOOK_SECRET_KEY_BASE}
+      - DISABLE_SSL=true
+    restart: unless-stopped
+
 volumes:
   caddy_data:
   caddy_config:
   immich_model_cache:
   odoo_db_data:
   odoo_data:
+  writebook_data:
