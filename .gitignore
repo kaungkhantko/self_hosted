@@ -19,3 +19,42 @@ __pycache__/
 # Immich large binary outputs (auto-generated, not source)
 immich_upload/backups/
 immich_upload/encoded-video/
+
+# Actual Budget — runtime data (SQLite, migrations, server files)
+actual_data/*
+!actual_data/.gitkeep
+
+# Firefly III — runtime data
+firefly_db/*
+!firefly_db/.gitkeep
+firefly_data/*
+!firefly_data/.gitkeep
+
+# Large runtime data dirs — not source config
+immich_upload/
+immich_db/
+jellyfin_cache/
+jellyfin_config/
+nextcloud_data/
+nextcloud_db/
+paperless/
+photoprism/
+navidrome/
+scrutiny/
+homarr/
+homer/
+odoo/
+ntfy/
+uptime-kuma/
+qbittorrent/
+lidarr/
+radarr/
+sonarr/
+readarr/
+prowlarr/
+bazarr/
+calibre-web/
+n8n/
+
+# One-off data files
+immich_backup.sql

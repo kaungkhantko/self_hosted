@@ -1,0 +1,138 @@
+# ── LAN-only (TLS via internal CA — run `caddy trust` or install the CA cert) ─
+
+music.lan {
+	reverse_proxy navidrome:4533
+	tls internal
+}
+
+jellyfin.lan {
+	reverse_proxy jellyfin:8096
+	tls internal
+}
+
+n8n.lan {
+	reverse_proxy n8n:5678
+	tls internal
+}
+
+photos.lan {
+	reverse_proxy immich-server:2283
+	tls internal
+}
+
+bazarr.lan {
+	reverse_proxy bazarr:6767
+	tls internal
+}
+
+status.lan {
+	reverse_proxy uptime-kuma:3001
+	tls internal
+}
+
+home.lan {
+	reverse_proxy homepage:3000
+	tls internal
+}
+
+dozzle.lan {
+	reverse_proxy dozzle:8080
+	tls internal
+}
+
+scrutiny.lan {
+	reverse_proxy scrutiny:8080
+	tls internal
+}
+
+radarr.lan {
+	reverse_proxy radarr:7878
+	tls internal
+}
+
+sonarr.lan {
+	reverse_proxy sonarr:8989
+	tls internal
+}
+
+lidarr.lan {
+	reverse_proxy lidarr:8686
+	tls internal
+}
+
+prowlarr.lan {
+	reverse_proxy prowlarr:9696
+	tls internal
+}
+
+qbittorrent.lan {
+	reverse_proxy gluetun:8082
+	tls internal
+}
+
+readarr.lan {
+	reverse_proxy readarr:8787
+	tls internal
+}
+
+books.lan {
+	reverse_proxy calibre-web:8083
+	tls internal
+}
+
+docs.lan {
+	reverse_proxy paperless-ngx:8000
+	tls internal
+}
+
+jellyseerr.lan {
+	reverse_proxy jellyseerr:5055
+	tls internal
+}
+
+budget.lan {
+	reverse_proxy actual-server:5006
+	tls internal
+}
+
+odoo.lan {
+	reverse_proxy odoo:8069
+	tls internal
+}
+
+firefly.lan {
+	reverse_proxy firefly-iii:8080
+	tls internal
+}
+
+firefly-import.lan {
+	reverse_proxy firefly-importer:8080
+	tls internal
+}
+
+# ── External access via DuckDNS (requires ports 80+443 forwarded on router) ──
+
+kaungkhantko.duckdns.org {
+	reverse_proxy jellyseerr:5055
+}
+
+jellyfin.kaungkhantko.duckdns.org {
+	reverse_proxy jellyfin:8096
+}
+
+music.kaungkhantko.duckdns.org {
+	reverse_proxy navidrome:4533
+}
+
+n8n.kaungkhantko.duckdns.org {
+	reverse_proxy n8n:5678
+}
+
+photos.kaungkhantko.duckdns.org {
+	reverse_proxy immich-server:2283
+}
+
+write.lan {
+	reverse_proxy writebook:3000
+	tls internal
+}

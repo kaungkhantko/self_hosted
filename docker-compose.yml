@@ -82,7 +82,7 @@ services:
       - GENERIC_TIMEZONE=Asia/Rangoon
     volumes:
       - ./n8n:/home/node/.n8n
-      - /home/kaung/Odoo-IFM/docs:/home/kaung/Odoo-IFM/docs:ro
+      - /mnt/media/Odoo-IFM/docs:/home/kaung/Odoo-IFM/docs:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     deploy:
@@ -135,9 +135,14 @@ services:
       - PGID=1000
       - TZ=Asia/Rangoon
       - WEBUI_PORT=8082
+      - WEBUI_ADDRESS=0.0.0.0
     volumes:
       - ./qbittorrent:/config
-      - ${MEDIA_PATH}:/data
+      - type: bind
+        source: ${MEDIA_PATH}
+        target: /data
+        bind:
+          propagation: slave
     deploy:
       resources:
         limits:
@@ -352,6 +357,65 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
+  # Homepage — Modern, fully static service dashboard
+  # Config lives in ./homepage/ — services.yaml, widgets.yaml, settings.yaml
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    env_file:
+      - .env
+    environment:
+      - HOMEPAGE_ALLOWED_HOSTS=192.168.1.2:3000,home.lan
+    volumes:
+      - ./homepage:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "3000:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Dozzle — Real-time Docker Log Viewer
+  # Lightweight, read-only log viewer for all containers
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "9999:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 32m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Scrutiny — Hard Drive Health Monitoring (SMART data)
+  # Monitors /dev/sda (OS drive) and /dev/sdb (Media DAS drive)
+  scrutiny:
+    image: ghcr.io/analogj/scrutiny:master-omnibus
+    container_name: scrutiny
+    cap_add:
+      - SYS_RAWIO
+    devices:
+      - /dev/sda:/dev/sda
+      - /dev/sdb:/dev/sdb
+    volumes:
+      - /run/udev:/run/udev:ro
+      - ./scrutiny:/opt/scrutiny/config
+    ports:
+      - "8090:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
   # Readarr — Book & Manga Collection Manager
   # Root folder: /data/Books  (→ ${MEDIA_PATH}/Books on host)
   # Connect to Prowlarr for indexers and qBittorrent for downloads
@@ -426,8 +490,7 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
-  # Immich Machine Learning
-  # GPU acceleration: set COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml in .env
+  # Immich Machine Learning — CPU inference
   immich-machine-learning:
     image: ghcr.io/immich-app/immich-machine-learning:release
     container_name: immich-machine-learning
@@ -502,7 +565,181 @@ services:
     environment:
       - TZ=${TZ}
 
+  # ─────────────────────────────────────────────
+  # Actual Budget — Personal Finance / Budgeting
+  # First run: open https://budget.lan and set a password
+  # Data persisted at ./actual_data (SQLite — no external DB needed)
+  actual-server:
+    image: actualbudget/actual-server:latest
+    container_name: actual-server
+    volumes:
+      - ./actual_data:/data
+    ports:
+      - "5006:5006"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Firefly III — Self-hosted Personal Finance Manager
+  # First run: open http://<host>:8080 to create admin account
+  # Data Importer UI: http://<host>:8081
+  firefly-db:
+    image: postgres:16-alpine
+    container_name: firefly-db
+    environment:
+      - POSTGRES_USER=firefly
+      - POSTGRES_PASSWORD=${FIREFLY_DB_PASSWORD}
+      - POSTGRES_DB=firefly
+    volumes:
+      - ./firefly_db/data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U firefly"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Firefly III — Main Application
+  firefly-iii:
+    image: fireflyiii/core:latest
+    container_name: firefly-iii
+    environment:
+      - APP_ENV=production
+      - APP_KEY=${FIREFLY_APP_KEY}
+      - APP_URL=http://firefly.lan
+      - DB_CONNECTION=pgsql
+      - DB_HOST=firefly-db
+      - DB_PORT=5432
+      - DB_DATABASE=firefly
+      - DB_USERNAME=firefly
+      - DB_PASSWORD=${FIREFLY_DB_PASSWORD}
+      - TZ=Asia/Rangoon
+      - TRUSTED_PROXIES=**
+      - CACHE_DRIVER=file
+      - SESSION_DRIVER=file
+    volumes:
+      - ./firefly_data:/var/www/html/storage/upload
+    ports:
+      - "8080:8080"
+    depends_on:
+      firefly-db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Firefly III — Data Importer (CSV / bank import UI)
+  firefly-importer:
+    image: fireflyiii/data-importer:latest
+    container_name: firefly-importer
+    environment:
+      - FIREFLY_III_URL=http://firefly-iii:8080
+      - VANITY_URL=http://firefly.lan
+      - TZ=Asia/Rangoon
+    ports:
+      - "8081:8080"
+    depends_on:
+      - firefly-iii
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Odoo 19 — PostgreSQL database
+  odoo_db:
+    image: postgres:16
+    container_name: odoo_db
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=odoo
+      - POSTGRES_PASSWORD=${ODOO_DB_PASSWORD}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - odoo_db_data:/var/lib/postgresql/data
+    shm_size: 128mb
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Odoo 19 — CRM + Accounting (Community Edition)
+  odoo:
+    image: odoo:19
+    container_name: odoo
+    depends_on:
+      - odoo_db
+    environment:
+      - HOST=odoo_db
+      - USER=odoo
+      - PASSWORD=${ODOO_DB_PASSWORD}
+    volumes:
+      - odoo_data:/var/lib/odoo
+      - ./odoo/odoo.conf:/etc/odoo/odoo.conf
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Paperless-ngx Redis — Job queue / broker
+  paperless-redis:
+    image: docker.io/valkey/valkey:9
+    container_name: paperless-redis
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Paperless-ngx — Document Management with OCR
+  # Consume folder (inbox): ${MEDIA_PATH}/Documents/paperless-consume/
+  # After first deploy, create admin: docker compose exec paperless-ngx python manage.py createsuperuser
+  paperless-ngx:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    container_name: paperless-ngx
+    depends_on:
+      - paperless-redis
+    environment:
+      - PAPERLESS_REDIS=redis://paperless-redis:6379
+      - PAPERLESS_OCR_LANGUAGE=eng+mya
+      - PAPERLESS_OCR_LANGUAGES=mya
+      - PAPERLESS_TIME_ZONE=Asia/Yangon
+      - PAPERLESS_URL=https://docs.lan
+      - PAPERLESS_SECRET_KEY=${PAPERLESS_SECRET_KEY}
+    volumes:
+      - ./paperless:/usr/src/paperless/data
+      - ${MEDIA_PATH}/Documents/paperless:/usr/src/paperless/media
+      - ${MEDIA_PATH}/Documents/paperless-consume:/usr/src/paperless/consume
+      - ${MEDIA_PATH}/Documents/paperless-export:/usr/src/paperless/export
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Writebook
+  writebook:
+    image: ghcr.io/basecamp/writebook:latest
+    container_name: writebook
+    volumes:
+      - writebook_data:/rails/storage
+    environment:
+      - SECRET_KEY_BASE=${WRITEBOOK_SECRET_KEY_BASE}
+      - DISABLE_SSL=true
+    restart: unless-stopped
+
 volumes:
   caddy_data:
   caddy_config:
   immich_model_cache:
+  odoo_db_data:
+  odoo_data:
+  writebook_data:
