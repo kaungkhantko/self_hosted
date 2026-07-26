@@ -345,17 +345,6 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
-  # Homer — Lightweight Static Service Dashboard
-  # Config lives at ./homer/config.yml — edit it to update the dashboard
-  homer:
-    image: b4bz/homer:latest
-    container_name: homer
-    volumes:
-      - ./homer:/www/assets
-    ports:
-      - "7575:8080"
-    restart: unless-stopped
-
   # ─────────────────────────────────────────────
   # Homepage — Modern, fully static service dashboard
   # Config lives in ./homepage/ — services.yaml, widgets.yaml, settings.yaml
