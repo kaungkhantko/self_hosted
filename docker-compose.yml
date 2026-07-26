@@ -2,6 +2,10 @@ services:
   # ─────────────────────────────────────────────
   # Navidrome Music Server
   navidrome:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     image: deluan/navidrome
     ports:
       - "4533:4533"
@@ -13,6 +17,10 @@ services:
   # ─────────────────────────────────────────────
   # DuckDNS Dynamic IP Updater
   duckdns:
+    deploy:
+      resources:
+        limits:
+          memory: 64m
     image: linuxserver/duckdns
     container_name: duckdns
     environment:
@@ -24,6 +32,10 @@ services:
   # ─────────────────────────────────────────────
   # Caddy HTTPS Reverse Proxy
   caddy:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     image: caddy:latest
     container_name: caddy
     ports:
@@ -97,6 +109,10 @@ services:
   # torrent traffic exits through the VPN tunnel.
   # Other containers reach qBittorrent via http://gluetun:8082
   gluetun:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     image: qmcgaw/gluetun:latest
     container_name: gluetun
     cap_add:
@@ -154,6 +170,10 @@ services:
   # FlareSolverr — Cloudflare bypass proxy for Prowlarr
   # Prowlarr routes CF-protected indexers through this
   flaresolverr:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
     environment:
@@ -270,6 +290,10 @@ services:
   # Admin panel: https://vault.kaungkhantko.duckdns.org/admin
   # Use with the official Bitwarden browser extension / mobile app
   vaultwarden:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     image: vaultwarden/server:latest
     container_name: vaultwarden
     environment:
@@ -311,6 +335,10 @@ services:
   # Then subscribe to topics in the ntfy app (iOS/Android)
   # Jellyseerr: Settings → Notifications → Webhook → https://ntfy.kaungkhantko.duckdns.org/alerts
   ntfy:
+    deploy:
+      resources:
+        limits:
+          memory: 128m
     image: binwiederhier/ntfy
     container_name: ntfy
     command: serve
@@ -488,13 +516,17 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2g
+          memory: 512m
           cpus: "4.0"
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
   # Immich Redis (Valkey) — Job queue & cache
   immich-redis:
+    deploy:
+      resources:
+        limits:
+          memory: 128m
     image: docker.io/valkey/valkey:9
     container_name: immich-redis
     restart: unless-stopped
@@ -503,6 +535,10 @@ services:
   # Immich Database — PostgreSQL 14 with pgvecto.rs for vector search
   # DB_STORAGE_TYPE=HDD because data lives on spinning disk
   immich-db:
+    deploy:
+      resources:
+        limits:
+          memory: 512m
     image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
     container_name: immich-db
     environment:
@@ -522,6 +558,10 @@ services:
   # can be streamed the moment sequential downloading has buffered the start.
   # Symlinks are cleaned up automatically after Radarr/Sonarr complete import.
   media-watcher:
+    deploy:
+      resources:
+        limits:
+          memory: 128m
     build: ./media-watcher
     container_name: media-watcher
     environment:
@@ -546,6 +586,10 @@ services:
   # Runs download_subs.py at 03:00 every day via busybox crond
   # Replaces the host cron job: 0 3 * * * /home/kaung/subliminal_venv/bin/python3 /home/kaung/download_subs.py
   subtitle-cron:
+    deploy:
+      resources:
+        limits:
+          memory: 64m
     build: ./subtitle-cron
     container_name: subtitle-cron
     restart: unless-stopped
@@ -649,6 +693,10 @@ services:
   # ─────────────────────────────────────────────
   # Odoo 19 — PostgreSQL database
   odoo_db:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     image: postgres:16
     container_name: odoo_db
     environment:
@@ -664,6 +712,10 @@ services:
   # ─────────────────────────────────────────────
   # Odoo 19 — CRM + Accounting (Community Edition)
   odoo:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     image: odoo:19
     container_name: odoo
     depends_on:
@@ -680,6 +732,10 @@ services:
   # ─────────────────────────────────────────────
   # Paperless-ngx Redis — Job queue / broker
   paperless-redis:
+    deploy:
+      resources:
+        limits:
+          memory: 128m
     image: docker.io/valkey/valkey:9
     container_name: paperless-redis
     restart: unless-stopped
@@ -716,6 +772,10 @@ services:
   # ─────────────────────────────────────────────
   # Writebook
   writebook:
+    deploy:
+      resources:
+        limits:
+          memory: 512m
     image: ghcr.io/basecamp/writebook:latest
     container_name: writebook
     volumes:
