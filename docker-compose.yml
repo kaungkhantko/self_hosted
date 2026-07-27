@@ -115,54 +115,21 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
-  # Gluetun — VPN client (Mullvad/WireGuard)
-  # qBittorrent runs inside this container's network namespace so all
-  # torrent traffic exits through the VPN tunnel.
-  # Other containers reach qBittorrent via http://gluetun:8082
-  gluetun:
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-    image: qmcgaw/gluetun:latest
-    container_name: gluetun
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    environment:
-      - VPN_SERVICE_PROVIDER=mullvad
-      - VPN_TYPE=wireguard
-      - WIREGUARD_PRIVATE_KEY=${MULLVAD_WG_PRIVATE_KEY}
-      - WIREGUARD_ADDRESSES=10.74.67.132/32
-      - SERVER_COUNTRIES=Sweden
-      - FIREWALL_INPUT_PORTS=8082,6881
-      - TZ=Asia/Rangoon
-      - DNS_ADDRESS=1.1.1.1
-      - BLOCK_MALICIOUS=off
-    ports:
-      - "8082:8082"
-      - "6881:6881"
-      - "6881:6881/udp"
-    restart: unless-stopped
-
-  # ─────────────────────────────────────────────
   # qBittorrent — Torrent Download Client
-  # Runs inside gluetun's network namespace — all traffic goes through VPN.
-  # All arr apps and qBit share ${MEDIA_PATH} as /data so hardlinks work.
-  # Reach the WebUI at http://gluetun:8082 (not qbittorrent:8082)
+  # Reach the WebUI at http://qbittorrent:8082
   qbittorrent:
     image: linuxserver/qbittorrent
     container_name: qbittorrent
-    network_mode: "service:gluetun"
-    depends_on:
-      - gluetun
     environment:
       - PUID=1000
       - PGID=1000
       - TZ=Asia/Rangoon
       - WEBUI_PORT=8082
       - WEBUI_ADDRESS=0.0.0.0
+    ports:
+      - "8082:8082"
+      - "6881:6881"
+      - "6881:6881/udp"
     volumes:
       - ./qbittorrent:/config
       - type: bind
@@ -582,7 +549,7 @@ services:
     build: ./media-watcher
     container_name: media-watcher
     environment:
-      - QB_URL=http://gluetun:8082
+      - QB_URL=http://qbittorrent:8082
       - QB_USER=admin
       - QB_PASS=${QB_PASS}
       - RADARR_URL=http://radarr:7878
@@ -815,3 +782,7 @@ volumes:
   odoo_db_data:
   odoo_data:
   writebook_data:
+
+networks:
+  default:
+    name: self_hosted_default
