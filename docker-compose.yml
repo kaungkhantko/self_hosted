@@ -775,6 +775,24 @@ services:
       - DISABLE_SSL=true
     restart: unless-stopped
 
+  # ─────────────────────────────────────────────
+  # Forgejo — Self-hosted Git server (GitHub alternative)
+  # Hosts the notes vault (Kaung-Notes-Vault) and future repos.
+  # Access via https://git.lan (Caddy internal TLS) — no host port published.
+  # SQLite backend — single-user, no extra DB container needed.
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:9
+    container_name: forgejo
+    environment:
+      - TZ=Asia/Rangoon
+    volumes:
+      - ./forgejo:/data
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    restart: unless-stopped
+
 volumes:
   caddy_data:
   caddy_config:

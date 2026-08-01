@@ -55,6 +55,17 @@ prowlarr/
 bazarr/
 calibre-web/
 n8n/
+forgejo/
 
 # One-off data files
 immich_backup.sql
+
+# macOS junk
+.DS_Store
+._.DS_Store
+
+# Runtime data — not source config
+vaultwarden/
+jellyseerr/db/
+jellyseerr/logs/
+jellyseerr/settings.old.json

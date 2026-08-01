@@ -136,3 +136,8 @@ write.lan {
 	reverse_proxy writebook:3000
 	tls internal
 }
+
+git.lan {
+	reverse_proxy forgejo:3000
+	tls internal
+}
