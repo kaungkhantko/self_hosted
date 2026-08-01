@@ -778,7 +778,8 @@ services:
   # ─────────────────────────────────────────────
   # Forgejo — Self-hosted Git server (GitHub alternative)
   # Hosts the notes vault (Kaung-Notes-Vault) and future repos.
-  # Access via https://git.lan (Caddy internal TLS) — no host port published.
+  # LAN: https://git.lan via Caddy (internal TLS).
+  # Tailnet: loopback port 3002 consumed by `tailscale serve` (tailnet-only HTTPS).
   # SQLite backend — single-user, no extra DB container needed.
   forgejo:
     image: codeberg.org/forgejo/forgejo:9
@@ -787,6 +788,8 @@ services:
       - TZ=Asia/Rangoon
     volumes:
       - ./forgejo:/data
+    ports:
+      - "127.0.0.1:3002:3000"
     deploy:
       resources:
         limits:
