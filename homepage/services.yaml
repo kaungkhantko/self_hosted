@@ -1,7 +1,17 @@
+- Notes & Git:
+    - Forgejo:
+        icon: sh-forgejo
+        href: https://home.tailc65fb0.ts.net
+        description: Notes vault & self-hosted git
+    - Homepage:
+        icon: docker.png
+        href: https://home.tailc65fb0.ts.net:8443
+        description: This dashboard
+
 - Media:
     - Jellyfin:
         icon: jellyfin.png
-        href: https://jellyfin.lan
+        href: https://home.tailc65fb0.ts.net:8444
         description: Movies, TV & Music streaming
         widget:
           type: jellyfin
@@ -10,7 +20,7 @@
 
     - Jellyseerr:
         icon: jellyseerr.png
-        href: https://jellyseerr.lan
+        href: https://home.tailc65fb0.ts.net:8450
         description: Request movies & TV shows
         widget:
           type: jellyseerr
@@ -19,28 +29,28 @@
 
     - Navidrome:
         icon: navidrome.png
-        href: https://music.lan
+        href: https://home.tailc65fb0.ts.net:8445
         description: Music streaming
 
     - Calibre-Web:
         icon: calibre-web.png
-        href: https://books.lan
+        href: https://home.tailc65fb0.ts.net:8454
         description: Book library
 
 - Downloads:
     - qBittorrent:
         icon: qbittorrent.png
-        href: https://qbittorrent.lan
-        description: Torrent client (via VPN)
+        href: https://home.tailc65fb0.ts.net:8456
+        description: Torrent client
         widget:
           type: qbittorrent
-          url: http://gluetun:8082
+          url: http://qbittorrent:8082
           username: admin
           password: {{HOMEPAGE_VAR_QB_PASS}}
 
     - Sonarr:
         icon: sonarr.png
-        href: https://sonarr.lan
+        href: https://home.tailc65fb0.ts.net:8457
         description: TV series management
         widget:
           type: sonarr
@@ -49,7 +59,7 @@
 
     - Radarr:
         icon: radarr.png
-        href: https://radarr.lan
+        href: https://home.tailc65fb0.ts.net:8458
         description: Movie management
         widget:
           type: radarr
@@ -58,7 +68,7 @@
 
     - Prowlarr:
         icon: prowlarr.png
-        href: https://prowlarr.lan
+        href: https://home.tailc65fb0.ts.net:8459
         description: Indexer management
         widget:
           type: prowlarr
@@ -67,17 +77,17 @@
 
     - Lidarr:
         icon: lidarr.png
-        href: https://lidarr.lan
+        href: https://home.tailc65fb0.ts.net:8460
         description: Music management
 
     - Readarr:
         icon: readarr.png
-        href: https://readarr.lan
+        href: https://home.tailc65fb0.ts.net:8461
         description: Book management
 
     - Bazarr:
         icon: bazarr.png
-        href: https://bazarr.lan
+        href: https://home.tailc65fb0.ts.net:8462
         description: Subtitle management
         widget:
           type: bazarr
@@ -87,23 +97,23 @@
 - Finance:
     - Actual Budget:
         icon: actual-budget.png
-        href: https://budget.lan
+        href: https://home.tailc65fb0.ts.net:8451
         description: Personal budgeting
 
     - Firefly III:
         icon: firefly.png
-        href: https://firefly.lan
+        href: https://home.tailc65fb0.ts.net:8452
         description: Personal finance manager
 
     - Odoo:
         icon: odoo.png
-        href: https://odoo.lan
+        href: https://home.tailc65fb0.ts.net:8453
         description: CRM & Accounting
 
 - Photos & Files:
     - Immich:
         icon: immich.png
-        href: https://photos.lan
+        href: https://home.tailc65fb0.ts.net:8446
         description: Photo & video backup
         widget:
           type: immich
@@ -112,19 +122,25 @@
 
     - Paperless:
         icon: paperless.png
-        href: https://docs.lan
+        href: https://home.tailc65fb0.ts.net:8448
         description: Document management
 
 - Automation:
     - n8n:
         icon: n8n.png
-        href: https://n8n.lan
+        href: https://home.tailc65fb0.ts.net:8447
         description: Workflow automation
+
+- Passwords:
+    - Vaultwarden:
+        icon: sh-bitwarden
+        href: https://home.tailc65fb0.ts.net:8455
+        description: Password manager
 
 - System:
     - Uptime Kuma:
         icon: uptime-kuma.png
-        href: https://status.lan
+        href: https://home.tailc65fb0.ts.net:8449
         description: Service monitoring
         widget:
           type: uptimekuma
@@ -133,7 +149,7 @@
 
     - Scrutiny:
         icon: scrutiny.png
-        href: https://scrutiny.lan
+        href: https://home.tailc65fb0.ts.net:8464
         description: Hard drive health (SMART)
         widget:
           type: scrutiny
@@ -141,10 +157,10 @@
 
     - Dozzle:
         icon: docker.png
-        href: https://dozzle.lan
+        href: https://home.tailc65fb0.ts.net:8463
         description: Docker log viewer
 
     - Cockpit:
         icon: cockpit.png
-        href: https://192.168.1.2:9090
+        href: https://home.tailc65fb0.ts.net:8466
         description: OS & storage management

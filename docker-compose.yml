@@ -717,6 +717,8 @@ services:
     volumes:
       - odoo_data:/var/lib/odoo
       - ./odoo/odoo.conf:/etc/odoo/odoo.conf
+    ports:
+      - "127.0.0.1:8069:8069"
     restart: unless-stopped
 
   # ─────────────────────────────────────────────
@@ -779,7 +781,7 @@ services:
   # Forgejo — Self-hosted Git server (GitHub alternative)
   # Hosts the notes vault (Kaung-Notes-Vault) and future repos.
   # LAN: https://git.lan via Caddy (internal TLS).
-  # Tailnet: loopback port 3002 consumed by `tailscale serve` (tailnet-only HTTPS).
+  # Tailnet: loopback port 3001 consumed by `tailscale serve` (tailnet-only HTTPS).
   # SQLite backend — single-user, no extra DB container needed.
   forgejo:
     image: codeberg.org/forgejo/forgejo:9

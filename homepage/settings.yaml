@@ -1,6 +1,6 @@
 title: Home Server
 description: kaungkhantko home lab
-startUrl: http://192.168.1.2:3000
+startUrl: https://home.tailc65fb0.ts.net:8443
 
 background:
   blur: sm
