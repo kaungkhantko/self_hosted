@@ -1,0 +1,26 @@
+title: Home Server
+description: kaungkhantko home lab
+startUrl: http://192.168.1.2:3000
+
+background:
+  blur: sm
+  opacity: 50
+
+theme: dark
+color: slate
+
+useEqualHeights: true
+
+layout:
+  Media:
+    style: row
+    columns: 4
+  Downloads:
+    style: row
+    columns: 4
+  Finance:
+    style: row
+    columns: 3
+  System:
+    style: row
+    columns: 4

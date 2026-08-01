@@ -1,0 +1,159 @@
+{
+  "name": "02 - Changelog Enhancement",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "changelog-enhance",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Merge Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "merged-check",
+              "leftValue": "={{ $json.body.pull_request.merged }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-merged",
+      "name": "Filter Merged",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.github.com/repos/' + $json.body.repository.full_name + '/pulls/' + $json.body.number + '/files?per_page=100' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/vnd.github.v3+json" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-pr-files",
+      "name": "Get PR Diff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "credentials": {
+        "httpHeaderAuth": { "id": "GITHUB_TOKEN_CREDENTIAL_ID", "name": "GitHub Token" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const pr = $('Merge Webhook').item.json.body.pull_request;\nconst allItems = $input.all();\nconst files = Array.isArray(allItems[0].json) ? allItems[0].json : allItems.map(i => i.json);\n\nlet patch = '';\nfor (const f of files) {\n  patch += `\\n--- ${f.filename} ---\\n${(f.patch || '').substring(0, 2000)}\\n`;\n}\n\nreturn [{\n  json: {\n    title: pr.title,\n    body: (pr.body || '').substring(0, 1000),\n    branch: pr.head.ref,\n    patch: patch.substring(0, 8000),\n    prNumber: pr.number,\n    repoFullName: $('Merge Webhook').item.json.body.repository.full_name\n  }\n}];"
+      },
+      "id": "prepare-context",
+      "name": "Prepare Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_HOST || 'http://172.19.0.1:11434') + '/api/generate' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"qwen2.5-coder:7b\",\n  \"prompt\": \"Generate a concise, human-readable changelog entry for this merged PR. Use past tense. Categorize as one of: Added, Fixed, Changed, Removed. Format: `### Category\\n- Description (PR #N)`\\n\\nPR Title: {{ $json.title }}\\nBranch: {{ $json.branch }}\\nPR Description: {{ $json.body }}\\n\\nKey file changes:\\n{{ $json.patch }}\\n\\nRules:\\n- One line per logical change\\n- Be specific about WHAT changed (model names, field names, behavior)\\n- Do NOT include file paths\\n- Include PR number as (#{{ $json.prNumber }})\",\n  \"stream\": false,\n  \"options\": { \"temperature\": 0.3, \"num_predict\": 300 }\n}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "ollama-changelog",
+      "name": "Ollama Changelog",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const entry = $json.response || 'Could not generate changelog entry.';\nconst ctx = $('Prepare Context').item.json;\n\nreturn [{\n  json: {\n    changelog_entry: entry,\n    prNumber: ctx.prNumber,\n    repoFullName: ctx.repoFullName,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "format-entry",
+      "name": "Format Entry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $input.item.json;\nconst line = JSON.stringify({\n  changelog_entry: ctx.changelog_entry,\n  prNumber: ctx.prNumber,\n  repoFullName: ctx.repoFullName,\n  timestamp: ctx.timestamp\n}) + '\\n';\nconst binaryData = Buffer.from(line, 'utf8');\nreturn [{\n  json: ctx,\n  binary: {\n    data: {\n      data: binaryData.toString('base64'),\n      mimeType: 'text/plain',\n      fileName: 'changelog_entries.jsonl'\n    }\n  }\n}];"
+      },
+      "id": "prepare-binary",
+      "name": "Prepare JSONL Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 480]
+    },
+    {
+      "parameters": {
+        "filePath": "/home/node/.n8n/storage/changelog_entries.jsonl",
+        "options": { "append": true }
+      },
+      "id": "save-local",
+      "name": "Save Locally",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [1560, 480]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', entry: $('Format Entry').item.json.changelog_entry }) }}"
+      },
+      "id": "respond-webhook",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1780, 480]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'skipped', reason: 'PR was not merged' }) }}"
+      },
+      "id": "respond-skip",
+      "name": "Respond Skip",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 480]
+    }
+  ],
+  "connections": {
+    "Merge Webhook": { "main": [[{ "node": "Filter Merged", "type": "main", "index": 0 }]] },
+    "Filter Merged": {
+      "main": [
+        [{ "node": "Get PR Diff", "type": "main", "index": 0 }],
+        [{ "node": "Respond Skip", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get PR Diff": { "main": [[{ "node": "Prepare Context", "type": "main", "index": 0 }]] },
+    "Prepare Context": { "main": [[{ "node": "Ollama Changelog", "type": "main", "index": 0 }]] },
+    "Ollama Changelog": { "main": [[{ "node": "Format Entry", "type": "main", "index": 0 }]] },
+    "Format Entry": { "main": [[{ "node": "Prepare JSONL Binary", "type": "main", "index": 0 }]] },
+    "Prepare JSONL Binary": { "main": [[{ "node": "Save Locally", "type": "main", "index": 0 }]] },
+    "Save Locally": { "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "dev-workflow" }, { "name": "changelog" }]
+}

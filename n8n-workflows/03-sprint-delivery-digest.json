@@ -1,0 +1,108 @@
+{
+  "name": "03 - Sprint Delivery Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 17 * * 5" }]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Every Friday 5PM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.github.com/repos/IFM-Financial-Planning/ifm-odoo/pulls?state=closed&sort=updated&direction=desc&per_page=30",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/vnd.github.v3+json" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-merged-prs",
+      "name": "Get Recent PRs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "credentials": {
+        "httpHeaderAuth": { "id": "GITHUB_TOKEN_CREDENTIAL_ID", "name": "GitHub Token" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prs = $input.all().map(i => i.json).flat();\nconst oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);\n\nconst merged = prs.filter(pr => {\n  if (!pr.merged_at) return false;\n  return new Date(pr.merged_at) > oneWeekAgo;\n});\n\nconst summary = merged.map(pr => {\n  const labels = (pr.labels || []).map(l => l.name).join(', ');\n  return `- #${pr.number}: ${pr.title} (by ${pr.user?.login || 'unknown'}) [${labels || 'no labels'}]`;\n}).join('\\n');\n\nconst stats = {\n  total: merged.length,\n  authors: [...new Set(merged.map(pr => pr.user?.login))],\n  labels: [...new Set(merged.flatMap(pr => (pr.labels || []).map(l => l.name)))]\n};\n\nreturn [{\n  json: {\n    prList: summary || 'No PRs merged this week.',\n    stats,\n    weekOf: oneWeekAgo.toISOString().split('T')[0]\n  }\n}];"
+      },
+      "id": "filter-this-week",
+      "name": "Filter This Week",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_HOST || 'http://172.19.0.1:11434') + '/api/generate' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"qwen2.5-coder:7b\",\n  \"prompt\": \"Write a brief weekly sprint digest for stakeholders. Use a professional but friendly tone. Include:\\n1. Executive Summary (2-3 sentences)\\n2. What Shipped (bullet list grouped by theme)\\n3. Key Stats\\n\\nMerged PRs this week (since {{ $json.weekOf }}):\\n{{ $json.prList }}\\n\\nStats: {{ $json.stats.total }} PRs merged by {{ $json.stats.authors.join(', ') }}\\nLabels used: {{ $json.stats.labels.join(', ') }}\",\n  \"stream\": false,\n  \"options\": { \"temperature\": 0.5, \"num_predict\": 600 }\n}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "ollama-digest",
+      "name": "Ollama Digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const digest = $json.response || 'Could not generate digest.';\nconst ctx = $('Filter This Week').item.json;\nconst date = new Date().toISOString().split('T')[0];\n\nconst report = `# Sprint Digest — Week of ${ctx.weekOf}\\n\\n${digest}\\n\\n---\\n*Generated ${date} by n8n + Ollama*\\n`;\n\nreturn [{ json: { report, filename: `digest-${ctx.weekOf}.md` } }];"
+      },
+      "id": "format-digest",
+      "name": "Format Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $input.item.json;\nconst binaryData = Buffer.from(ctx.report || '', 'utf8');\nreturn [{\n  json: ctx,\n  binary: {\n    report: {\n      data: binaryData.toString('base64'),\n      mimeType: 'text/markdown',\n      fileName: ctx.filename\n    }\n  }\n}];"
+      },
+      "id": "prepare-digest-binary",
+      "name": "Prepare Digest Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ '/home/node/.n8n/storage/digests/' + $json.filename }}",
+        "dataPropertyName": "report"
+      },
+      "id": "save-file",
+      "name": "Save Digest",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Every Friday 5PM": { "main": [[{ "node": "Get Recent PRs", "type": "main", "index": 0 }]] },
+    "Get Recent PRs": { "main": [[{ "node": "Filter This Week", "type": "main", "index": 0 }]] },
+    "Filter This Week": { "main": [[{ "node": "Ollama Digest", "type": "main", "index": 0 }]] },
+    "Ollama Digest": { "main": [[{ "node": "Format Digest", "type": "main", "index": 0 }]] },
+    "Format Digest": { "main": [[{ "node": "Prepare Digest Binary", "type": "main", "index": 0 }]] },
+    "Prepare Digest Binary": { "main": [[{ "node": "Save Digest", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "dev-workflow" }, { "name": "reporting" }]
+}

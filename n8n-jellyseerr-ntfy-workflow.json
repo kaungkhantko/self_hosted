@@ -1,0 +1,112 @@
+{
+  "id": "JsNtfyWatchNow01",
+  "name": "Jellyseerr: Notify ntfy with Watch Now button",
+  "active": false,
+  "meta": null,
+  "pinData": {},
+  "versionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567891",
+  "activeVersionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567891",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jellyseerr-request",
+        "responseMode": "onReceived",
+        "responseData": "firstEntryJson",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Jellyseerr Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "jellyseerr-request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Jellyseerr sends the payload as top-level JSON keys (no wrapper object)\nconst body = $input.first().json;\n\n// Notification types: MEDIA_PENDING, MEDIA_APPROVED, MEDIA_DECLINED,\n//                     MEDIA_AVAILABLE, MEDIA_FAILED, TEST_NOTIFICATION\nconst notifType = body.notification_type || '';\nconst subject   = body.subject || 'Unknown Title';\nconst message   = body.message || subject;\nconst mediaType = (body.media || {}).media_type || 'movie';\nconst image     = body.image || '';\n\n// Extract title and year from subject like \"City of God (2002)\"\nconst match = subject.match(/^(.+?)\\s*\\((\\d{4})\\)\\s*$/);\nconst title = match ? match[1] : subject;\nconst year  = match ? parseInt(match[2]) : 0;\n\nconst eventMap = {\n  MEDIA_PENDING:      'Requested',\n  MEDIA_APPROVED:     'Approved',\n  MEDIA_DECLINED:     'Declined',\n  MEDIA_AVAILABLE:    'Now Available',\n  MEDIA_FAILED:       'Download Failed',\n  TEST_NOTIFICATION:  'Test',\n};\nconst event = eventMap[notifType] || notifType;\n\n// Include Watch Now button only for downloading or available media\nconst showWatchNow = ['MEDIA_AVAILABLE'].includes(notifType);\nconst watchNowAction = showWatchNow\n  ? `http, Watch Now, http://media-watcher:8888/prioritize, POST, body={\"title\":\"${title}\",\"year\":${year}}`\n  : '';\n\nreturn [{ json: { subject, title, year, mediaType, event, message, image, notifType, showWatchNow, watchNowAction } }];"
+      },
+      "id": "code-node",
+      "name": "Parse Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ntfy:80/alerts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer tk_yn3fibqh2t288vuw4j3h8n2t4xyur"
+            },
+            {
+              "name": "Title",
+              "value": "={{ $json.event }}: {{ $json.subject }}"
+            },
+            {
+              "name": "Priority",
+              "value": "default"
+            },
+            {
+              "name": "Tags",
+              "value": "={{ $json.mediaType === 'movie' ? 'movie_camera' : 'tv' }}"
+            },
+            {
+              "name": "Actions",
+              "value": "={{ $json.watchNowAction }}"
+            },
+            {
+              "name": "Click",
+              "value": "http://jellyfin:8096"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={{ $json.message }}"
+      },
+      "id": "http-node",
+      "name": "Send ntfy Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Jellyseerr Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Payload": {
+      "main": [
+        [
+          {
+            "node": "Send ntfy Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-16T00:00:00.000Z",
+  "versionId": "1"
+}

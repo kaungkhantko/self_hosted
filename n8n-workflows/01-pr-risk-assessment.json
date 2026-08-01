@@ -1,0 +1,287 @@
+{
+  "name": "01 - PR Risk Assessment",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pr-risk-assessment",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "PR Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\nconst action = body.action || '';\nconst pr = body.pull_request || {};\n\nif (action !== 'opened' && action !== 'synchronize') {\n  return []; // ignore closed, labeled, review events, etc.\n}\n\nif (pr.draft === true) {\n  return []; // skip draft PRs\n}\n\nif (!body.repository || !pr.number) {\n  throw new Error('Malformed webhook payload: missing repository or PR number');\n}\n\nreturn [{\n  json: {\n    action,\n    prNumber: pr.number,\n    repoFullName: body.repository.full_name,\n    headSHA: pr.head.sha,\n    prTitle: pr.title || ''\n  }\n}];"
+      },
+      "id": "filter-normalize",
+      "name": "Filter & Normalize PR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.github.com/repos/' + $json.repoFullName + '/issues/' + $json.prNumber + '/comments?per_page=100' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check-existing-comments",
+      "name": "Check Existing Comments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ],
+      "continueOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GITHUB_TOKEN_CREDENTIAL_ID",
+          "name": "GitHub Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const pr = $('Filter & Normalize PR').item.json;\n// Fail open: if comment fetch errored, proceed with review anyway\nconst comments = $input.all().map(i => i.json).filter(c => !c.error);\n\n// Bot comments embed the headSHA in their footer — use it as idempotency key\nconst alreadyReviewed = comments.some(c =>\n  typeof c.body === 'string' && c.body.includes(pr.headSHA)\n);\n\nif (alreadyReviewed) {\n  return []; // already reviewed this exact commit, stop silently\n}\n\nreturn [{ json: pr }];"
+      },
+      "id": "skip-if-reviewed",
+      "name": "Skip If Already Reviewed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.github.com/repos/' + $json.repoFullName + '/pulls/' + $json.prNumber + '/files?per_page=100' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-pr-files",
+      "name": "Get PR Files",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        300
+      ],
+      "continueOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GITHUB_TOKEN_CREDENTIAL_ID",
+          "name": "GitHub Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const pr = $('Skip If Already Reviewed').item.json;\nconst files = $input.all().map(i => i.json).flat();\n\nconst HIGH_RISK_PATTERNS = [\n  /models\\/(lead|case|illustration|underwriting_item)\\./,\n  /models\\/.*\\.(write|create)\\s*\\(/,\n  /context.*allow_case_promotion/,\n  /context.*allow_state_change/,\n  /context.*skip_dedup_check/,\n  /_inherit\\s*=/,\n  /VALID_TRANSITIONS/,\n  /REQUIREMENT_TO_TASK_TYPES/\n];\n\nconst MEDICAL_PATTERNS = [\n  /models\\/medical/,\n  /models\\/prescription/,\n  /sin_encrypted/,\n  /birth_date/\n];\n\nconst riskFileSet = new Set();\nconst complianceFileSet = new Set();\nlet combinedPatch = '';\nconst PATCH_LIMIT = 12000;\n\nfor (const f of files) {\n  const p = f.filename || '';\n  const patch = f.patch || '';\n  combinedPatch += `\\n--- ${p} ---\\n${patch}\\n`;\n\n  for (const re of HIGH_RISK_PATTERNS) {\n    if (re.test(p) || re.test(patch)) {\n      riskFileSet.add(p);\n      break;\n    }\n  }\n  for (const re of MEDICAL_PATTERNS) {\n    if (re.test(p) || re.test(patch)) {\n      complianceFileSet.add(p);\n      break;\n    }\n  }\n}\n\nconst riskFiles = Array.from(riskFileSet);\nconst complianceFiles = Array.from(complianceFileSet);\n\nlet patch = combinedPatch;\nlet truncated = false;\nif (combinedPatch.length > PATCH_LIMIT) {\n  patch = combinedPatch.substring(0, PATCH_LIMIT);\n  truncated = true;\n  patch += `\\n\\n[DIFF TRUNCATED — first ${PATCH_LIMIT} of ${combinedPatch.length} chars shown`\n        + `${files.length >= 100 ? '; PR may have >100 files, only first 100 fetched' : ''}]`;\n}\n\nreturn [{\n  json: {\n    riskFiles,\n    complianceFiles,\n    riskLevel: riskFiles.length > 2 ? 'HIGH' : riskFiles.length > 0 ? 'MEDIUM' : 'LOW',\n    hasComplianceConcern: complianceFiles.length > 0,\n    fileCount: files.length,\n    patch,\n    truncated,\n    prNumber: pr.prNumber,\n    repoFullName: pr.repoFullName,\n    headSHA: pr.headSHA,\n    prTitle: pr.prTitle\n  }\n}];"
+      },
+      "id": "classify-risk",
+      "name": "Classify Risk",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_HOST || 'http://172.19.0.1:11434') + '/api/generate' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"qwen2.5-coder:7b\",\n  \"prompt\": \"You are a code reviewer for an Odoo 19 insurance module (IFM). Analyze this PR diff and provide:\\n1. A 2-sentence summary of what changed\\n2. Risk assessment (LOW/MEDIUM/HIGH) with reasoning\\n3. Any concerns about: state transitions, context flag usage, _inherit override fragility, medical data privacy (PIPEDA), underwriting dedup logic\\n\\nPre-classified risk: {{ $json.riskLevel }}\\nRisk files: {{ $json.riskFiles.join(', ') || 'none' }}\\nCompliance files: {{ $json.complianceFiles.join(', ') || 'none' }}\\n{{ $json.truncated ? '⚠️ Note: diff was truncated — partial changeset only' : '' }}\\n\\nDiff:\\n{{ $json.patch }}\",\n  \"stream\": false,\n  \"options\": { \"temperature\": 0.3, \"num_predict\": 1500 }\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "ollama-review",
+      "name": "Ollama Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        300
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const risk = $('Classify Risk').item.json;\nconst ollamaResult = $json;\n\nconst badges = {\n  'HIGH':   '🔴 HIGH RISK',\n  'MEDIUM': '🟡 MEDIUM RISK',\n  'LOW':    '🟢 LOW RISK'\n};\n\nconst review = (ollamaResult.response && typeof ollamaResult.response === 'string')\n  ? ollamaResult.response.trim()\n  : `*LLM review unavailable — ${ollamaResult.error || 'Ollama did not respond'}. Rule-based classification used.*`;\n\nlet body = `## ${badges[risk.riskLevel] || '⚪ UNKNOWN'} — Automated PR Review\\n\\n`;\nbody += review + '\\n\\n';\n\nif (risk.truncated) {\n  body += '> ⚠️ **Note:** Diff was truncated — analysis covers a partial changeset only.\\n\\n';\n}\n\nif (risk.hasComplianceConcern) {\n  body += `### ⚠️ PIPEDA Compliance Flag\\nThese files touch medical/PII data: \\`${risk.complianceFiles.join('\\`, \\`')}\\`\\nEnsure field-level access controls and encryption are maintained.\\n\\n`;\n}\n\nbody += `---\\n*Auto-generated by n8n + Ollama (qwen2.5-coder:7b) — ${risk.fileCount} files analyzed · commit ${risk.headSHA.substring(0, 7)}*`;\n\nreturn [{ json: { body, prNumber: risk.prNumber, repoFullName: risk.repoFullName } }];"
+      },
+      "id": "format-comment",
+      "name": "Format Comment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.github.com/repos/' + $json.repoFullName + '/issues/' + $json.prNumber + '/comments' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ body: $json.body }) }}",
+        "options": {}
+      },
+      "id": "post-comment",
+      "name": "Post PR Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2220,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GITHUB_TOKEN_CREDENTIAL_ID",
+          "name": "GitHub Token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "PR Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter & Normalize PR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter & Normalize PR": {
+      "main": [
+        [
+          {
+            "node": "Check Existing Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Existing Comments": {
+      "main": [
+        [
+          {
+            "node": "Skip If Already Reviewed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip If Already Reviewed": {
+      "main": [
+        [
+          {
+            "node": "Get PR Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get PR Files": {
+      "main": [
+        [
+          {
+            "node": "Classify Risk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Risk": {
+      "main": [
+        [
+          {
+            "node": "Ollama Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Review": {
+      "main": [
+        [
+          {
+            "node": "Format Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Comment": {
+      "main": [
+        [
+          {
+            "node": "Post PR Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "dev-workflow"
+    },
+    {
+      "name": "pr-review"
+    }
+  ]
+}

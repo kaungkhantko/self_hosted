@@ -1,0 +1,12 @@
+[Unit]
+Description=Jellyfin MPV Shim
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/jellyfin-mpv-shim
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
