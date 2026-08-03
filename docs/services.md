@@ -49,3 +49,4 @@ All services are defined in `docker-compose.yml`. Start/stop with `./run.sh up` 
 |---------|------|---------|
 | media-watcher | 8888 (internal) | Watch-while-downloading: creates Jellyfin symlinks for in-progress torrents |
 | subtitle-cron | — | Runs `download_subs.py` daily at 03:00 via containerized cron |
+| food-tracker | — | Syncs #food entries from the Obsidian vault into SQLite; polls Renpho for weight/body composition every 6h |
