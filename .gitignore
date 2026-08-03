@@ -24,6 +24,10 @@ immich_upload/encoded-video/
 actual_data/*
 !actual_data/.gitkeep
 
+# Food tracker — runtime data (SQLite, vault mirror, renpho token)
+food-data/*
+!food-data/.gitkeep
+
 # Firefly III — runtime data
 firefly_db/*
 !firefly_db/.gitkeep
