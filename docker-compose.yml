@@ -592,7 +592,7 @@ services:
     restart: unless-stopped
     environment:
       - TZ=${TZ}
-      - FORGEJO_REPO_URL=https://kaung:${FORGEJO_TOKEN}@${FORGEJO_HOST:-home.tailc65fb0.ts.net}/kaung/Kaung-Notes-Vault.git
+      - FORGEJO_REPO_URL=http://kaung:${FORGEJO_TOKEN}@forgejo:3000/kaung/Kaung-Notes-Vault.git
       - RENPHO_EMAIL=${RENPHO_EMAIL}
       - RENPHO_PASSWORD=${RENPHO_PASSWORD}
       - ACTIVITY_FACTOR=${ACTIVITY_FACTOR:-1.5}
